@@ -1,19 +1,14 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using System.Net;
 using Consul;
+using DnsClient;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Hosting.Server;
-using Microsoft.AspNetCore.Hosting.Server.Features;
-using Microsoft.AspNetCore.HttpsPolicy;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Product.WebAPI.Infrastructrue;
+using Product.WebAPI.Middlewares;
 
 namespace Product.WebAPI
 {
@@ -30,6 +25,17 @@ namespace Product.WebAPI
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllers();
+            services.AddSingleton<IDnsQuery>(p =>
+            {
+                var strConsulDnsLookupIP = Configuration.GetValue<string>("consulDnsLookupIp");
+                IPAddress consulDnsLookupIp;
+                if (!string.IsNullOrEmpty(strConsulDnsLookupIP))
+                    consulDnsLookupIp = IPAddress.Parse(strConsulDnsLookupIP);
+                else
+                    consulDnsLookupIp = IPAddress.Loopback;
+
+                return new LookupClient(consulDnsLookupIp, 8600);
+            });
             services.AddSingleton<IHostedService, ConsulHostedService>();
             services.Configure<ConsulConfig>(Configuration.GetSection("consulConfig"));
             services.AddSingleton<IConsulClient, ConsulClient>(p => new ConsulClient(consulConfig =>
@@ -51,6 +57,8 @@ namespace Product.WebAPI
             // app.UseHttpsRedirection();
 
             app.UseRouting();
+
+            app.UseMiddleware<HealthCheckMiddleware>();
 
             app.UseAuthorization();
 
